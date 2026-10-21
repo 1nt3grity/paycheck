@@ -1,0 +1,359 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paycheck Split Calculator</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 20px 14px;
+    font-family: Arial, sans-serif;
+    background: #f3f5f9;
+    color: #172033;
+  }
+
+  .app {
+    max-width: 560px;
+    margin: auto;
+  }
+
+  h1 { font-size: 26px; }
+  .muted { color: #667085; font-size: 14px; }
+
+  .card {
+    background: white;
+    padding: 18px;
+    border-radius: 16px;
+    margin: 14px 0;
+    box-shadow: 0 2px 8px #00000008;
+  }
+
+  label {
+    display: block;
+    font-weight: bold;
+    margin: 12px 0 7px;
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #cbd2df;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+
+  input[type="range"] {
+    width: 100%;
+    accent-color: #2855a6;
+  }
+
+  .category {
+    padding: 13px 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .category:last-child { border-bottom: none; }
+
+  .heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .heading strong { font-size: 16px; }
+  .amount { font-weight: bold; font-size: 19px; }
+
+  .description {
+    color: #667085;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 75px;
+    gap: 12px;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .controls input[type="number"] {
+    padding: 8px;
+    text-align: center;
+  }
+
+  .summary {
+    background: #edf1f7;
+    padding: 15px;
+    border-radius: 12px;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0;
+  }
+
+  button {
+    width: 100%;
+    padding: 13px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 10px;
+    background: #2855a6;
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  button.secondary {
+    background: white;
+    color: #172033;
+    border: 1px solid #cbd2df;
+  }
+
+  .status { font-size: 13px; color: #667085; }
+</style>
+</head>
+
+<body>
+<div class="app">
+  <h1>💸 Paycheck Split Calculator</h1>
+  <p class="muted">
+    Enter your paycheck and calculate how much to move into each account.
+  </p>
+
+  <section class="card">
+    <label for="source">Paycheck source</label>
+    <select id="source" style="width:100%;padding:12px;border:1px solid #cbd2df;border-radius:10px;font-size:16px">
+      <option>YMCA</option>
+      <option>Acumen</option>
+      <option>Other</option>
+    </select>
+
+    <label for="paycheck">Take-home paycheck ($)</label>
+    <input id="paycheck" type="number" min="0"
+           step="0.01" value="500" inputmode="decimal">
+  </section>
+
+  <section class="card">
+    <h2>Your allocations</h2>
+    <div id="categories"></div>
+  </section>
+
+  <section class="card">
+    <h2>Paycheck summary</h2>
+    <div class="summary">
+      <div class="summary-row">
+        <span>Paycheck total</span>
+        <strong id="total">$500.00</strong>
+      </div>
+      <div class="summary-row">
+        <span>Total allocated</span>
+        <strong id="allocated">$500.00</strong>
+      </div>
+      <hr>
+      <div class="summary-row">
+        <strong id="statusTitle">Fully allocated</strong>
+        <strong id="remaining">$0.00</strong>
+      </div>
+      <p class="status" id="statusText">Every dollar is assigned.</p>
+    </div>
+
+    <button id="copy">Copy paycheck breakdown</button>
+    <button class="secondary" id="reset">Reset percentages</button>
+    <p class="muted" id="message"></p>
+  </section>
+
+  <section class="card">
+    <h3>Where your money goes</h3>
+    <p><strong>Fun:</strong> Cash App, outings and spending.</p>
+    <p><strong>Checking:</strong> Bills, subscriptions, cat expenses and gas.</p>
+    <p><strong>SECU Savings:</strong> Savings and emergency fund.</p>
+    <p><strong>Investing / HYSA:</strong> Combined amount for investments and high-yield savings.</p>
+  </section>
+  <p class="muted">
+    This calculator does not connect to your bank or transfer money.
+  </p>
+</div>
+
+<script>
+const defaults = [
+  {
+    id: "fun",
+    name: "Fun",
+    description: "Cash App, outings and spending",
+    percent: 15
+  },
+  {
+    id: "checking",
+    name: "Checking",
+    description: "Bills, subscriptions, cat expenses and gas",
+    percent: 45
+  },
+  {
+    id: "secu",
+    name: "SECU Savings",
+    description: "Savings and emergency fund",
+    percent: 20
+  },
+  {
+    id: "invest",
+    name: "Investing / HYSA",
+    description: "Investments and high-yield savings",
+    percent: 20
+  }
+];
+
+let categories = defaults.map(item => ({...item}));
+
+const $ = id => document.getElementById(id);
+
+const money = value =>
+  value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD"
+  });
+
+function renderCategories() {
+  $("categories").innerHTML = categories.map(c => `
+    <div class="category">
+      <div class="heading">
+        <div>
+          <strong>${c.name}</strong>
+          <div class="description">${c.description}</div>
+        </div>
+        <span class="amount" id="amount-${c.id}">$0.00</span>
+      </div>
+
+      <div class="controls">
+        <input type="range" min="0" max="100" step="1"
+          value="${c.percent}" id="slider-${c.id}"
+          aria-label="${c.name} percentage slider">
+
+        <input type="number" min="0" max="100" step="1"
+          value="${c.percent}" id="percent-${c.id}"
+          aria-label="${c.name} percentage">
+      </div>
+    </div>
+  `).join("");
+
+  categories.forEach(c => {
+    $("slider-" + c.id).addEventListener("input", e => {
+      changePercent(c.id, e.target.value);
+    });
+
+    $("percent-" + c.id).addEventListener("input", e => {
+      changePercent(c.id, e.target.value);
+    });
+  });
+
+  update();
+}
+
+function changePercent(id, value) {
+  const category = categories.find(c => c.id === id);
+  category.percent = Math.max(
+    0,
+    Math.min(100, Number(value) || 0)
+  );
+
+  $("slider-" + id).value = category.percent;
+  $("percent-" + id).value = category.percent;
+  update();
+}
+
+function update() {
+  const paycheck = Math.max(
+    0,
+    Number($("paycheck").value) || 0
+  );
+
+  const percentTotal = categories.reduce(
+    (sum, c) => sum + c.percent, 0
+  );
+
+  const allocated = paycheck * percentTotal / 100;
+  const remaining = paycheck - allocated;
+
+  categories.forEach(c => {
+    $("amount-" + c.id).textContent =
+      money(paycheck * c.percent / 100);
+  });
+
+  $("total").textContent = money(paycheck);
+  $("allocated").textContent = money(allocated);
+  $("remaining").textContent = money(remaining);
+
+  if (percentTotal > 100) {
+    $("statusTitle").textContent = "Over budget";
+    $("statusText").textContent =
+      `Your percentages total ${percentTotal}%. Reduce them to 100% or less.`;
+    $("remaining").style.color = "#b42318";
+  } else if (percentTotal < 100) {
+    $("statusTitle").textContent = "Money remaining";
+    $("statusText").textContent =
+      `${money(remaining)} is not assigned yet.`;
+    $("remaining").style.color = "#17663b";
+  } else {
+    $("statusTitle").textContent = "Fully allocated";
+    $("statusText").textContent = "Every dollar is assigned.";
+    $("remaining").style.color = "#17663b";
+  }
+}
+
+$("paycheck").addEventListener("input", update);
+
+$("reset").addEventListener("click", () => {
+  categories = defaults.map(item => ({...item}));
+  renderCategories();
+  $("message").textContent = "Percentages reset.";
+});
+
+$("copy").addEventListener("click", async () => {
+  const paycheck = Math.max(
+    0, Number($("paycheck").value) || 0
+  );
+
+  const percentTotal = categories.reduce(
+    (sum, c) => sum + c.percent, 0
+  );
+
+  const lines = [
+    "PAYCHECK SPLIT — " + $("source").value,
+    "Paycheck: " + money(paycheck),
+    ...categories.map(c =>
+      `${c.name}: ${money(paycheck * c.percent / 100)} (${c.percent}%)`
+    ),
+    "Unassigned: " + money(paycheck * (1 - percentTotal / 100))
+  ];
+
+  const text = lines.join("\n");
+
+  try {
+    await navigator.clipboard.writeText(text);
+    $("message").textContent = "Breakdown copied!";
+  } catch (error) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    $("message").textContent = copied
+      ? "Breakdown copied!"
+      : text;
+  }
+});
+
+renderCategories();
+</script>
+</body>
+</html>
